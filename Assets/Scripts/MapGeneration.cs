@@ -1,13 +1,16 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using UnityEditor.Compilation;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using Voronoi2;
+using Random = UnityEngine.Random;
 
 public class MapGeneration : MonoBehaviour
 {
     [Header("Preferences")]
-    [SerializeField] private Tile point;
+    [SerializeField] private Tile pointTile;
     [SerializeField] private Tile linePoint;
     [SerializeField] private Tile groundTile;
     [SerializeField] private Tile groundTile2;
@@ -18,36 +21,71 @@ public class MapGeneration : MonoBehaviour
     private List<Vector2> sites;
 
     [Header("Settings")]
-    [Range(50, 1000)]
-    [SerializeField] int siteCount = 200;
-    [Range(50, 1000)]
-    [SerializeField] int mapSize = 512;
-    [Range(0, 0.7f)]
-    [SerializeField] float cutValue = 0.2f; // Отсечение краев
+    
+    [SerializeField] private bool isEditMode = true;
+    [Range(128, 3000)]
+    [SerializeField] private int siteCount = 200;
+    [Range(0, 0.9f)]
+    [SerializeField] private float minSizeBetweenPoints = 0.7f;
+    [Range(512, 2048)]
+    [SerializeField] private int mapSize = 512;
+    
+    [Space]
+    [Range(0, 1.0f)]
+    [SerializeField] private float fillRadius = 0.8f;
+    [Range(0, 1f)]
+    [SerializeField] private float cuteRadius = 0.8f;
+    [Range(0, 1f)]
+    [SerializeField] private float chanceToSaveBorder= 0.5f;
+    
+    [Space]
+    [SerializeField] private int __devSeed = 0;
 
+    private float FillRadius => (fillRadius * mapSize / 2);
+    private Vector3Int MapCenter => new Vector3Int((int)((float)mapSize / 2), (int)((float)mapSize / 2), 0);
+    
     private void Start()
     {
         GenerateGround();
     }
 
-    private void Update()
+    private void HandleDevButtons()
     {
         if (Input.GetKeyDown(KeyCode.R))
         {
             GenerateGround();
+            return;
         }
-
+        if (Input.GetKeyDown(KeyCode.Q))
+        {
+            __devSeed--;
+            GenerateGround();
+            return;
+        }
+        if (Input.GetKeyDown(KeyCode.E))
+        {
+            __devSeed++;
+            GenerateGround();
+            return;
+        }
         if (Input.GetKeyDown(KeyCode.P))
         {
             Debug.LogError("ERORR - P");
             Debug.Break();
         }
     }
+
+    private void Update()
+    {
+        HandleDevButtons();
+    }
     private void GenerateGround()
     {
         ground.ClearAllTiles();
-        spreadPoints();
-        FillTilesOnGround();
+        SpreadPoints();
+        
+        _FillTestTiles();
+        FillTilesInRadius();
     }
 
     private List<GraphEdge> MakeVoronoiGraph(List<Vector2> sites, int width, int height)
@@ -63,47 +101,42 @@ public class MapGeneration : MonoBehaviour
 
     }
 
-    private void spreadPoints()
+    private void SpreadPoints()
     {
         sites = new List<Vector2>();
-        int seed = Random.Range(0, 999999999);
+        // #if DEV
+        int seed = __devSeed; // Random.Range(0, 999999999);
         Random.InitState(seed);
-        // TODO: Generate long 9 999 999 999 999 из двух интов
 
         Debug.Log("SEED: " + seed);
-
-        for (int i = 0; i < siteCount; i++)
+        
+        // Calculating small cube size
+        float area = (mapSize * mapSize) / (float)siteCount;
+        float areaLen = Mathf.Sqrt(area);
+        for (float y = 0; y < mapSize - areaLen; y += areaLen)
         {
-            sites.Add(new Vector2((float)(Random.value * mapSize), (float)(Random.value * mapSize)));
-        }
+            bool slideY = false;
+            for (float x = 0; x < mapSize - areaLen; x += areaLen)
+            {
+                // Calculating circle inside small cube and putting random point                
+                float squareCenterX = x + areaLen / 2;
+                float squareCenterY = y + (slideY ? areaLen / 2 : areaLen);
+                float radius = areaLen * minSizeBetweenPoints;
+                slideY = !slideY;
 
+                var point = Random.insideUnitCircle * radius;
+                
+                sites.Add(new Vector2((float)(point.x + squareCenterX), (float)(point.y + squareCenterY)));        
+            }
+        }
+        
         ge = MakeVoronoiGraph(sites, mapSize, mapSize);
     }
 
-    private void FillTilesOnGround()
+    private void _FillTestTiles()
     {
-        // Отсекаем края
-        int geStart = (int)(ge.Count * cutValue);
-        int sitesStart = (int)(sites.Count * cutValue);
-
-        int geEnd = ge.Count - geStart;
-        int sitesEnd = sites.Count - geStart;
-
-        // Края
-        // Можно закоментить*
-        for (int x = 0; x < mapSize; x++)
-        {
-            ground.SetTile(new Vector3Int(x, 0, 0), linePoint);
-            ground.SetTile(new Vector3Int(x, mapSize, 0), linePoint);
-        }
-        for (int y = 0; y < mapSize; y++)
-        {
-            ground.SetTile(new Vector3Int(0, y, 0), linePoint);
-            ground.SetTile(new Vector3Int(mapSize, y, 0), linePoint);
-        }
-
         // Рисуем
-        for (int i = geStart; i < geEnd; i++)
+        for (var i = 0; i < ge.Count; i++)
         {
             var p1 = new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0);
             var p2 = new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0);
@@ -112,23 +145,14 @@ public class MapGeneration : MonoBehaviour
             TileLine(p1, p2, linePoint);
 
             // Точки пересечения
-            ground.SetTile(new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0), point);
-            ground.SetTile(new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0), point);
-        }
-
-        for (int i = sitesStart; i < sitesEnd; i++)
-        {
-            // Центры
-            var p = new Vector3Int((int)(sites[i].x - 1.5f), (int)(sites[i].y - 1.5f), 0);
-            ground.SetTile(p, point);
-            
-            FillArea(p, i % 2 == 0 ? groundTile : groundTile2);
+            ground.SetTile(new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0), pointTile);
+            ground.SetTile(new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0), pointTile);
         }
     }
 
     private void TileLine(Vector3Int p1, Vector3Int p2, Tile tile)
     {
-        while (p1 != p2)
+        while (p1.x != p2.x || p1.y != p2.y)
         {
             ground.SetTile(p1, tile);
 
@@ -143,25 +167,112 @@ public class MapGeneration : MonoBehaviour
                 p1.y--;
         }
     }
-
-    private void FillArea(Vector3Int centroid, Tile tile)
+    
+    private void FillTilesInRadius()
     {
-        Vector3Int left = centroid + Vector3Int.left;
-    }
-
-    private Vector3Int v()
-    {
-        return Vector3Int.zero;
+        for (var i = 0; i < sites.Count; i++)
+        {
+            if (CentroidInCircleByRadius(sites[i], FillRadius))
+            {
+                if (!CentroidInCircleByRadius(sites[i], FillRadius * cuteRadius) && Random.Range(0.0f, 1f) <= chanceToSaveBorder)
+                    continue;
+                
+                Vector3Int point = new Vector3Int((int)sites[i].x, (int)sites[i].y, 0);
+                FillArea(point, groundTile);
+            }
+        }
     }
     
+    private bool CentroidInCircleByRadius(Vector2 point, float radius)
+    {
+        var dist = Vector2.Distance(new Vector2(MapCenter.x, MapCenter.y), point);
+        return (dist < radius);
+    }
+    
+    private void FillArea(Vector3Int centroid, Tile tile)
+    {
+        var filled = new List<Vector3Int>();
+        filled.Add(centroid);
+        while (true)
+        {
+            var filledOneAtLeast = false;
+            var pointsToDelete = new List<Vector3Int>();
+            for (var i = 0; i < filled.Count; i++) 
+            {
+                var _point = filled[i];
+                var next = _point + Vector3Int.right;
+                if (!ground.HasTile(next))
+                {
+                    filledOneAtLeast = true;
+                    ground.SetTile(next, tile);
+                    filled.Add(next);
+                }
+
+                next = _point + Vector3Int.left;
+                if (!ground.HasTile(next))
+                {
+                    filledOneAtLeast = true;
+                    ground.SetTile(next, tile);
+                    filled.Add(next);
+                }
+
+                next = _point + Vector3Int.up;
+                if (!ground.HasTile(next))
+                {
+                    filledOneAtLeast = true;
+                    ground.SetTile(next, tile);
+                    filled.Add(next);
+                }
+
+                next = _point + Vector3Int.down;
+                if (!ground.HasTile(next))
+                {
+                    filledOneAtLeast = true;
+                    ground.SetTile(next, tile);
+                    filled.Add(next);
+                }
+                pointsToDelete.Add(_point);
+            }
+            foreach (var p in pointsToDelete) filled.Remove(p);
+            if (!filledOneAtLeast) break;
+        }
+    }
 
     private void OnDrawGizmos()
     {
-        if (ge == null) return;
-        for (int i = 0; i < ge.Count; i++)
+        if (isEditMode)
         {
-            var p1 = new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0);
-            var p2 = new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(new Vector3(MapCenter.x, MapCenter.y, 0), FillRadius);
+            Gizmos.color = Color.red;
+            Gizmos.DrawWireSphere(new Vector3(MapCenter.x, MapCenter.y, 0), FillRadius * cuteRadius);
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireCube(new Vector3(MapCenter.x, MapCenter.y, 0), new Vector3(mapSize, mapSize));
+            
+            Gizmos.color = Color.grey;
+            float area = (mapSize * mapSize) / (float)siteCount;
+            float areaLen = Mathf.Sqrt(area);
+            for (float y = 0; y < mapSize - areaLen; y += areaLen)
+            {
+                bool slideY = false;
+                for (float x = 0; x < mapSize - areaLen; x += areaLen)
+                {
+                    // Calculating circle inside small cube and putting random point                
+                    float squareCenterX = x + areaLen / 2;
+                    float squareCenterY = y + (slideY ? areaLen / 2 : areaLen);
+                    float radius = areaLen * minSizeBetweenPoints;
+                    slideY = !slideY;
+
+                    Gizmos.DrawWireSphere(new Vector3(squareCenterX, squareCenterY, 0), radius);
+                }
+            }
+        }
+
+        if (ge == null) return;
+        foreach (var t in ge)
+        {
+            var p1 = new Vector3Int((int)t.x1, (int)t.y1, 0);
+            var p2 = new Vector3Int((int)t.x2, (int)t.y2, 0);
             Gizmos.color = Color.red;
             Gizmos.DrawWireSphere(p1, 2f);
             Gizmos.DrawWireSphere(p2, 2f);

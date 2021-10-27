@@ -230,7 +230,7 @@ Grid:
   m_GameObject: {fileID: 1741657297}
   m_Enabled: 1
   m_CellSize: {x: 1, y: 1, z: 0}
-  m_CellGap: {x: 0, y: 0, z: 0}
+  m_CellGap: {x: -1e-11, y: -1e-11, z: -0}
   m_CellLayout: 0
   m_CellSwizzle: 0
 --- !u!4 &1741657299
@@ -277,14 +277,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d31e90db3f9a19240b9632256dbd0103, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  point: {fileID: 0}
-  linePoint: {fileID: 0}
-  groundTile: {fileID: 0}
-  groundTile2: {fileID: 0}
+  pointTile: {fileID: 11400000, guid: 46e8e9fedf6e4b7438ca0661b3b82395, type: 2}
+  linePoint: {fileID: 11400000, guid: 6baf9ebd80d75dd4b99ef3e61fa61aa5, type: 2}
+  groundTile: {fileID: 11400000, guid: 05b33886e9f47dd48bb5ec5771e6fa27, type: 2}
+  groundTile2: {fileID: 11400000, guid: 58516cbae94aa5b41af6e9bbf19050ee, type: 2}
   ground: {fileID: 2061088585}
+  isEditMode: 1
   siteCount: 200
   mapSize: 512
-  cutValue: 0.2
+  fillRadius: 162
+  minSizeBetweenPoints: 0.324
+  __devSeed: 0
 --- !u!4 &1836027841
 Transform:
   m_ObjectHideFlags: 0
@@ -311,7 +314,7 @@ GameObject:
   - component: {fileID: 2061088585}
   - component: {fileID: 2061088584}
   m_Layer: 0
-  m_Name: Tilemap
+  m_Name: ground
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
