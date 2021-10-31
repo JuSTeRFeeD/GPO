@@ -44,6 +44,13 @@ public class MapGeneration : MonoBehaviour
     private float FillRadius => (fillRadius * mapSize / 2);
     private Vector3Int MapCenter => new Vector3Int((int)((float)mapSize / 2), (int)((float)mapSize / 2), 0);
     
+    // Objects Distribution
+    [Space] [SerializeField] private GameObject resourcesContainer;
+    [SerializeField] private GameObject testTree;  
+    [Range(0.0f, 0.5f)] [SerializeField] private float treeChance = 0.5f;
+    [Range(0.0f, 10.0f)] [SerializeField] private float scaler = 0.5f;
+    [SerializeField] private Tilemap perlinGround;
+    
     private void Start()
     {
         GenerateGround();
@@ -81,11 +88,12 @@ public class MapGeneration : MonoBehaviour
     }
     private void GenerateGround()
     {
-        ground.ClearAllTiles();
-        SpreadPoints();
+        // ground.ClearAllTiles();
+        // SpreadPoints();
         
-        _FillTestTiles();
-        FillTilesInRadius();
+        // _FillTestTiles();
+        // FillTilesInRadius();
+        ObjectsDistribution();
     }
 
     private List<GraphEdge> MakeVoronoiGraph(List<Vector2> sites, int width, int height)
@@ -190,7 +198,8 @@ public class MapGeneration : MonoBehaviour
     }
     
     private void FillArea(Vector3Int centroid, Tile tile)
-    {
+    { 
+        int limit = 256; 
         var filled = new List<Vector3Int>();
         filled.Add(centroid);
         while (true)
@@ -234,7 +243,7 @@ public class MapGeneration : MonoBehaviour
                 pointsToDelete.Add(_point);
             }
             foreach (var p in pointsToDelete) filled.Remove(p);
-            if (!filledOneAtLeast) break;
+            if (!filledOneAtLeast || limit-- < 0) break;
         }
     }
 
@@ -283,6 +292,23 @@ public class MapGeneration : MonoBehaviour
         {
             Gizmos.color = Color.green;
             Gizmos.DrawWireSphere(new Vector2(sites[i].x - 1.5f, sites[i].y - 1.5f), 2f);
+        }
+    }
+
+    private void ObjectsDistribution()
+    {
+        for (var x = 0; x < mapSize; x++) {
+            for (var y = 0; y < mapSize; y++)
+            {
+                var p = Mathf.PerlinNoise((float)x / mapSize * scaler , (float)y / mapSize * scaler);
+                var pos = new Vector3Int(x, y, 0);
+                groundTile2.color = new Color(p, p, p);
+                perlinGround.SetTile(pos, groundTile2);
+                // perlinGround.SetColor(pos, );
+                
+                // if (p <= treeChance)
+                    // Instantiate(testTree, new Vector3(x, y, 0), Quaternion.identity, resourcesContainer.transform);
+            }
         }
     }
 }
