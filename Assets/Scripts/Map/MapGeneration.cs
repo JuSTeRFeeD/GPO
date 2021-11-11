@@ -16,6 +16,9 @@ public class MapGeneration : MonoBehaviour
     [SerializeField] private Tile groundTile2;
     [SerializeField] private Tilemap ground;
 
+    [SerializeField] private Tile[] tiles;
+
+    [Space]
     private Voronoi voroObject = new Voronoi(0.1f);
     private List<GraphEdge> ge;
     private List<Vector2> sites;
@@ -23,11 +26,11 @@ public class MapGeneration : MonoBehaviour
     [Header("Settings")]
     
     [SerializeField] private bool isEditMode = true;
-    [Range(128, 3000)]
+    [Range(64, 3000)]
     [SerializeField] private int siteCount = 200;
     [Range(0, 0.9f)]
     [SerializeField] private float minSizeBetweenPoints = 0.7f;
-    [Range(512, 2048)]
+    [Range(64, 512)]
     [SerializeField] private int mapSize = 512;
     
     [Space]
@@ -44,11 +47,16 @@ public class MapGeneration : MonoBehaviour
     private float FillRadius => (fillRadius * mapSize / 2);
     private Vector3Int MapCenter => new Vector3Int((int)((float)mapSize / 2), (int)((float)mapSize / 2), 0);
     
+    
     // Objects Distribution
-    [Space] [SerializeField] private GameObject resourcesContainer;
-    [SerializeField] private GameObject testTree;  
+    [Space] 
+    [SerializeField] private Transform resourcesContainer;
+    [SerializeField] private GameObject[] treesPrefabs;
+    [SerializeField] private GameObject[] bushesPrefabs;
+    [SerializeField] private GameObject[] stonesPrefabs;
+    
     [Range(0.0f, 0.5f)] [SerializeField] private float treeChance = 0.5f;
-    [Range(0.0f, 10.0f)] [SerializeField] private float scaler = 0.5f;
+    [Range(0.0f, 100.0f)] [SerializeField] private float scaler = 0.5f;
     [SerializeField] private Tilemap perlinGround;
     
     private void Start()
@@ -88,12 +96,26 @@ public class MapGeneration : MonoBehaviour
     }
     private void GenerateGround()
     {
-        // ground.ClearAllTiles();
-        // SpreadPoints();
+        ClearMap();
+        SpreadPoints();
         
-        // _FillTestTiles();
-        // FillTilesInRadius();
+        _FillTestTiles();
+        FillTilesInRadius();
         ObjectsDistribution();
+
+        var player = GameObject.FindWithTag("Player");
+        if (player != null)
+        {
+            player.transform.position = MapCenter;
+        }
+    }
+
+    private void ClearMap()
+    {
+        foreach (Transform child in resourcesContainer) {
+            Destroy(child.gameObject);
+        }
+        ground.ClearAllTiles();
     }
 
     private List<GraphEdge> MakeVoronoiGraph(List<Vector2> sites, int width, int height)
@@ -180,24 +202,24 @@ public class MapGeneration : MonoBehaviour
     {
         for (var i = 0; i < sites.Count; i++)
         {
-            if (CentroidInCircleByRadius(sites[i], FillRadius))
+            if (PointInCircleByRadius(sites[i], FillRadius))
             {
-                if (!CentroidInCircleByRadius(sites[i], FillRadius * cuteRadius) && Random.Range(0.0f, 1f) <= chanceToSaveBorder)
+                if (!PointInCircleByRadius(sites[i], FillRadius * cuteRadius) && Random.Range(0.0f, 1f) <= chanceToSaveBorder)
                     continue;
                 
                 Vector3Int point = new Vector3Int((int)sites[i].x, (int)sites[i].y, 0);
-                FillArea(point, groundTile);
+                FillArea(point);
             }
         }
     }
     
-    private bool CentroidInCircleByRadius(Vector2 point, float radius)
+    private bool PointInCircleByRadius(Vector2 point, float radius)
     {
         var dist = Vector2.Distance(new Vector2(MapCenter.x, MapCenter.y), point);
         return (dist < radius);
     }
     
-    private void FillArea(Vector3Int centroid, Tile tile)
+    private void FillArea(Vector3Int centroid)
     { 
         int limit = 256; 
         var filled = new List<Vector3Int>();
@@ -206,8 +228,9 @@ public class MapGeneration : MonoBehaviour
         {
             var filledOneAtLeast = false;
             var pointsToDelete = new List<Vector3Int>();
-            for (var i = 0; i < filled.Count; i++) 
+            for (var i = 0; i < filled.Count; i++)
             {
+                var tile = tiles[Random.Range(0, tiles.Length)];
                 var _point = filled[i];
                 var next = _point + Vector3Int.right;
                 if (!ground.HasTile(next))
@@ -297,18 +320,61 @@ public class MapGeneration : MonoBehaviour
 
     private void ObjectsDistribution()
     {
-        for (var x = 0; x < mapSize; x++) {
-            for (var y = 0; y < mapSize; y++)
+        var bushes = CalcNoise(0.4f, 0.59f);
+        var trees = CalcNoise(0.5f, 0.9f);
+        var stones = CalcNoise(0.1f, 0.5f, 20000, 20000);
+        for (var i = 0; i < trees.Count; i++)
+        {
+            var pos = trees[i];
+            if (Random.Range(0.0f, 1f) > 0.9f 
+                && ground.HasTile(pos) 
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
             {
-                var p = Mathf.PerlinNoise((float)x / mapSize * scaler , (float)y / mapSize * scaler);
-                var pos = new Vector3Int(x, y, 0);
-                groundTile2.color = new Color(p, p, p);
-                perlinGround.SetTile(pos, groundTile2);
-                // perlinGround.SetColor(pos, );
-                
-                // if (p <= treeChance)
-                    // Instantiate(testTree, new Vector3(x, y, 0), Quaternion.identity, resourcesContainer.transform);
+                Instantiate(treesPrefabs[Random.Range(0, treesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
             }
         }
+        for (var i = 0; i < bushes.Count; i++)
+        {
+            var pos = bushes[i];
+            if (Random.Range(0.0f, 1f) > 0.98f 
+                && ground.HasTile(pos) 
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
+            {
+                Instantiate(bushesPrefabs[Random.Range(0, bushesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
+            }
+        }
+        for (var i = 0; i < bushes.Count; i++)
+        {
+            var pos = bushes[i];
+            if (Random.Range(0.0f, 1f) > 0.96f 
+                && ground.HasTile(pos) 
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
+            {
+                Instantiate(stonesPrefabs[Random.Range(0, stonesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
+            }
+        }
+    }
+    
+    List<Vector3Int>  CalcNoise(float min, float max, float offsetX = 0, float offsetY = 0)
+    {
+        List<Vector3Int> poses = new List<Vector3Int>();
+        float y = 0.0F;
+        while (y < mapSize)
+        {
+            float x = 0.0F;
+            while (x < mapSize)
+            {
+                float xCoord = offsetX + x / mapSize * scaler;
+                float yCoord = offsetY + y / mapSize * scaler;
+                float height = Mathf.PerlinNoise(xCoord, yCoord);
+                if (height >= min && height <= max)
+                {
+                    poses.Add(new Vector3Int((int)x, (int)y, 0));
+                }
+                x++;
+            }
+            y++;
+        }
+        return poses;
     }
 }
