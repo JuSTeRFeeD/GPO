@@ -92,7 +92,8 @@ GameObject:
   m_Component:
   - component: {fileID: 5982661909574339901}
   - component: {fileID: 2631364404010389308}
-  m_Layer: 0
+  - component: {fileID: 3543316434509044803}
+  m_Layer: 8
   m_Name: Bush2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -125,3 +126,29 @@ SortingGroup:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 10
+--- !u!61 &3543316434509044803
+BoxCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7918408592248303347}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IsTrigger: 1
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: 0, y: 0.21821195}
+  m_SpriteTilingProperty:
+    border: {x: 0, y: 0, z: 0, w: 0}
+    pivot: {x: 0, y: 0}
+    oldSize: {x: 0, y: 0}
+    newSize: {x: 0, y: 0}
+    adaptiveTilingThreshold: 0
+    drawMode: 0
+    adaptiveTiling: 0
+  m_AutoTiling: 0
+  serializedVersion: 2
+  m_Size: {x: 1.43331, y: 1.4045902}
+  m_EdgeRadius: 0

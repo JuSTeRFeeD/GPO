@@ -14,7 +14,10 @@ public class MapGeneration : MonoBehaviour
     [SerializeField] private Tile linePoint;
     [SerializeField] private Tile groundTile;
     [SerializeField] private Tile groundTile2;
+    [Space]
     [SerializeField] private Tilemap ground;
+
+    private int[,] voronoiMap; // Линии пересечений рисуются тут (заполнение уже на самой tilemap)
 
     [SerializeField] private Tile[] tiles;
 
@@ -46,11 +49,15 @@ public class MapGeneration : MonoBehaviour
 
     private float FillRadius => (fillRadius * mapSize / 2);
     private Vector3Int MapCenter => new Vector3Int((int)((float)mapSize / 2), (int)((float)mapSize / 2), 0);
-    
-    
+
+
     // Objects Distribution
-    [Space] 
-    [SerializeField] private Transform resourcesContainer;
+    [Space] [Header("Objects and structures")]
+    [SerializeField] private GameObject spawnPlace;
+    [SerializeField] private float minDistanceBetweenObject = 1f;
+    [Space]
+    [SerializeField] private LayerMask resourcesLayer; 
+    [SerializeField] private Transform objectsContainer;
     [SerializeField] private GameObject[] treesPrefabs;
     [SerializeField] private GameObject[] bushesPrefabs;
     [SerializeField] private GameObject[] stonesPrefabs;
@@ -59,7 +66,7 @@ public class MapGeneration : MonoBehaviour
     [Range(0.0f, 100.0f)] [SerializeField] private float scaler = 0.5f;
     [SerializeField] private Tilemap perlinGround;
     
-    private void Start()
+    private void Awake()
     {
         GenerateGround();
     }
@@ -99,20 +106,24 @@ public class MapGeneration : MonoBehaviour
         ClearMap();
         SpreadPoints();
         
-        _FillTestTiles();
+        FillVoronoiGhostMap(); // Для границ карты
         FillTilesInRadius();
+        FillEmpty();
         ObjectsDistribution();
 
+        // Спавн поинт
+        var spawnPos = new Vector2(MapCenter.x, MapCenter.y) + Random.insideUnitCircle * 5;
+        Instantiate(spawnPlace, spawnPos, Quaternion.identity, objectsContainer);
         var player = GameObject.FindWithTag("Player");
         if (player != null)
         {
-            player.transform.position = MapCenter;
+            player.transform.position = spawnPos;
         }
     }
 
     private void ClearMap()
     {
-        foreach (Transform child in resourcesContainer) {
+        foreach (Transform child in objectsContainer) {
             Destroy(child.gameObject);
         }
         ground.ClearAllTiles();
@@ -163,28 +174,32 @@ public class MapGeneration : MonoBehaviour
         ge = MakeVoronoiGraph(sites, mapSize, mapSize);
     }
 
-    private void _FillTestTiles()
+    private void FillVoronoiGhostMap()
     {
+        voronoiMap = new int[mapSize, mapSize];
         // Рисуем
         for (var i = 0; i < ge.Count; i++)
         {
             var p1 = new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0);
             var p2 = new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0);
 
+            VoronoiMapLine(p1, p2, ref voronoiMap);
+            
+            
             // Линии между пересечениями 
-            TileLine(p1, p2, linePoint);
+            // TileLine(p1, p2, linePoint);
 
             // Точки пересечения
-            ground.SetTile(new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0), pointTile);
-            ground.SetTile(new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0), pointTile);
+            // ground.SetTile(new Vector3Int((int)ge[i].x1, (int)ge[i].y1, 0), pointTile);
+            // ground.SetTile(new Vector3Int((int)ge[i].x2, (int)ge[i].y2, 0), pointTile);
         }
     }
 
-    private void TileLine(Vector3Int p1, Vector3Int p2, Tile tile)
+    private void VoronoiMapLine(Vector3Int p1, Vector3Int p2, ref int[,] map)
     {
         while (p1.x != p2.x || p1.y != p2.y)
         {
-            ground.SetTile(p1, tile);
+            map[p1.x, p1.y] = 1;
 
             if (p1.x < p2.x)
                 p1.x++;
@@ -233,7 +248,7 @@ public class MapGeneration : MonoBehaviour
                 var tile = tiles[Random.Range(0, tiles.Length)];
                 var _point = filled[i];
                 var next = _point + Vector3Int.right;
-                if (!ground.HasTile(next))
+                if (voronoiMap[next.x, next.y] != 1 && !ground.HasTile(next))
                 {
                     filledOneAtLeast = true;
                     ground.SetTile(next, tile);
@@ -241,7 +256,7 @@ public class MapGeneration : MonoBehaviour
                 }
 
                 next = _point + Vector3Int.left;
-                if (!ground.HasTile(next))
+                if (voronoiMap[next.x, next.y] != 1 && !ground.HasTile(next))
                 {
                     filledOneAtLeast = true;
                     ground.SetTile(next, tile);
@@ -249,7 +264,7 @@ public class MapGeneration : MonoBehaviour
                 }
 
                 next = _point + Vector3Int.up;
-                if (!ground.HasTile(next))
+                if (voronoiMap[next.x, next.y] != 1 && !ground.HasTile(next))
                 {
                     filledOneAtLeast = true;
                     ground.SetTile(next, tile);
@@ -257,7 +272,7 @@ public class MapGeneration : MonoBehaviour
                 }
 
                 next = _point + Vector3Int.down;
-                if (!ground.HasTile(next))
+                if (voronoiMap[next.x, next.y] != 1 && !ground.HasTile(next))
                 {
                     filledOneAtLeast = true;
                     ground.SetTile(next, tile);
@@ -267,6 +282,28 @@ public class MapGeneration : MonoBehaviour
             }
             foreach (var p in pointsToDelete) filled.Remove(p);
             if (!filledOneAtLeast || limit-- < 0) break;
+        }
+    }
+
+    private void FillEmpty() // Заполение пустого пространства между ячейками
+    {
+        for (var x = 0; x < mapSize; x++)
+        {
+            for (var y = 0; y < mapSize; y++)
+            {
+                if (ground.HasTile(new Vector3Int(x, y, 0))) continue;
+                
+                if ((ground.HasTile(new Vector3Int(x + 1, y, 0)) || ground.HasTile(new Vector3Int(x + 2, y, 0)))
+                && ground.HasTile(new Vector3Int(x - 1, y, 0)))
+                {
+                    ground.SetTile(new Vector3Int(x, y, 0), pointTile);
+                }
+                if ((ground.HasTile(new Vector3Int(x, y + 1, 0)) || ground.HasTile(new Vector3Int(x, y + 2, 0)))
+                && ground.HasTile(new Vector3Int(x, y - 1, 0)))
+                {
+                    ground.SetTile(new Vector3Int(x, y, 0), pointTile);
+                }
+            }
         }
     }
 
@@ -318,19 +355,32 @@ public class MapGeneration : MonoBehaviour
         }
     }
 
+    // Проверять объекты по близости чтобы не спавнить впритык
+    // Объектов по близости нет или есть
+    private bool CheckObjectNear(Vector2 pos, float radius)
+    {
+        Collider2D[] results = new Collider2D[10];
+        Physics2D.OverlapCircleNonAlloc(pos, radius, results, resourcesLayer);
+        foreach (var item in results) if (item != null) return false;
+        return true;
+    }
+    
+    // Размещение ресурсов
     private void ObjectsDistribution()
     {
+        // Ресурсы
         var bushes = CalcNoise(0.4f, 0.59f);
         var trees = CalcNoise(0.5f, 0.9f);
         var stones = CalcNoise(0.1f, 0.5f, 20000, 20000);
-        for (var i = 0; i < trees.Count; i++)
+        for (var i = 0; i < trees.Count; i++) 
         {
             var pos = trees[i];
             if (Random.Range(0.0f, 1f) > 0.9f 
                 && ground.HasTile(pos) 
-                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius)
+                && CheckObjectNear(new Vector2(pos.x, pos.y), minDistanceBetweenObject))
             {
-                Instantiate(treesPrefabs[Random.Range(0, treesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
+                Instantiate(treesPrefabs[Random.Range(0, treesPrefabs.Length)], pos, Quaternion.identity, objectsContainer);
             }
         }
         for (var i = 0; i < bushes.Count; i++)
@@ -338,9 +388,10 @@ public class MapGeneration : MonoBehaviour
             var pos = bushes[i];
             if (Random.Range(0.0f, 1f) > 0.98f 
                 && ground.HasTile(pos) 
-                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius)
+                && CheckObjectNear(new Vector2(pos.x, pos.y), minDistanceBetweenObject))
             {
-                Instantiate(bushesPrefabs[Random.Range(0, bushesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
+                Instantiate(bushesPrefabs[Random.Range(0, bushesPrefabs.Length)], pos, Quaternion.identity, objectsContainer);
             }
         }
         for (var i = 0; i < bushes.Count; i++)
@@ -348,9 +399,10 @@ public class MapGeneration : MonoBehaviour
             var pos = bushes[i];
             if (Random.Range(0.0f, 1f) > 0.96f 
                 && ground.HasTile(pos) 
-                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius))
+                && PointInCircleByRadius(new Vector2(pos.x, pos.y), FillRadius)
+                && CheckObjectNear(new Vector2(pos.x, pos.y), minDistanceBetweenObject))
             {
-                Instantiate(stonesPrefabs[Random.Range(0, stonesPrefabs.Length)], pos, Quaternion.identity, resourcesContainer);
+                Instantiate(stonesPrefabs[Random.Range(0, stonesPrefabs.Length)], pos, Quaternion.identity, objectsContainer);
             }
         }
     }
